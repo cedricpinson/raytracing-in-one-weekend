@@ -129,7 +129,7 @@ vec3 randomUnitHemiSphere(inout int seed, const vec3 normal) {
     return normalize(-p);
 }
 
-bool intersectSphere(const Ray ray, float t_min, float t_max, const Item item, out Hit hit) {
+bool intersectSphere(const Ray ray, const float t_min, const float t_max, const Item item, inout Hit hit) {
     vec4 sphere = vec4(item.position.xyz, item.radius);
     vec3 oc = ray.origin - sphere.xyz;
     float a = dot(ray.direction, ray.direction);
@@ -196,6 +196,7 @@ bool intersectWorld(const Ray ray, float min_t, float max_t, out Hit hit)
             Item sphere = gScene.items[i];
             bool intersect = intersectSphere(ray, min_t, max_t, sphere, hit);
             if (intersect) {
+                hit.material = sphere.material;
                 max_t = hit.t;
                 rayHit = true;
             }
@@ -209,18 +210,20 @@ int raySeed = 0;
 
 // Lambert material scattering
 bool scatterLambert(const Ray ray, const Hit hit, out vec3 attenuation, out Ray scattered) {
-    scattered.direction = hit.normal + randomUnitSphere(raySeed);
-    if (abs(scattered.direction.x) < 1e-8 && abs(scattered.direction.y) < 1e-8 && abs(scattered.direction.z) < 1e-8) {
-        scattered.direction = hit.normal;
+    vec3 direction = hit.normal + randomUnitSphere(raySeed);
+    if (abs(direction.x) < 1e-8 && abs(direction.y) < 1e-8 && abs(direction.z) < 1e-8) {
+        direction = hit.normal;
     }
+    scattered.direction = normalize(direction);
     scattered.origin = hit.position;
     attenuation = gScene.materials[hit.material].albedo;
     return true;
 }
+
 // Metal material scattering
 bool scatterMetal(const Ray ray, const Hit hit, out vec3 attenuation, out Ray scattered) {
     vec3 reflected = reflect(normalize(ray.direction), hit.normal);
-    scattered.direction = reflected;
+    scattered.direction = normalize(reflected);
     scattered.origin = hit.position;
     attenuation = gScene.materials[hit.material].albedo;
     return (dot(scattered.direction, hit.normal) > 0.0);
@@ -233,7 +236,7 @@ bool rayInner(const Ray ray, out Ray nextRay, inout vec3 color)
 
         bool result = false;
         vec3 attenuation;
-        switch (hit.material) {
+        switch (gScene.materials[hit.material].type) {
         case MaterialLambert:
             result = scatterLambert(ray, hit, attenuation, nextRay);
             break;
@@ -247,7 +250,6 @@ bool rayInner(const Ray ray, out Ray nextRay, inout vec3 color)
         } else {
             color *= vec3(0.0);
         }
-        //nextRay = Ray(hit.position, randomUnitHemiSphere(raySeed, hit.normal));
         return result;
     }
 
@@ -258,7 +260,7 @@ bool rayInner(const Ray ray, out Ray nextRay, inout vec3 color)
 vec3 rayColor(const Ray ray)
 {
     vec3 color = vec3(1.0);
-    const int maxNumRay = 10;
+    const int maxNumRay = 20;
     int i = 0;
     Ray currentRay = ray;
     Ray nextRay;
@@ -279,23 +281,56 @@ vec3 rayColor(const Ray ray)
 
 void setupScene(out Scene scene)
 {
+    // center
+    int materialIndex = 0;
     scene.materials[0].type = MaterialLambert;
-    scene.materials[0].albedo = vec3(0.5,0.5,0.5);
+    scene.materials[0].albedo = vec3(0.7,0.3,0.3);
+    materialIndex++;
 
-    scene.materials[1].type = MaterialMetal;
+    // ground
+    scene.materials[1].type = MaterialLambert;
+    scene.materials[1].albedo = vec3(0.8,0.8,0.0);
+    materialIndex++;
+
+    // left
+    scene.materials[2].type = MaterialMetal;
+    scene.materials[2].albedo = vec3(0.8,0.8,0.8);
+    materialIndex++;
+
+    // right
+    scene.materials[3].type = MaterialMetal;
+    scene.materials[3].albedo = vec3(0.8,0.6,0.2);
+    materialIndex++;
 
 
     int itemIndex = 0;
+
+    // center
     scene.items[itemIndex].position = vec3(0.0, 0.0, -1.0);
     scene.items[itemIndex].radius = 0.5;
     scene.items[itemIndex].shapeType = ShapeSphere;
     scene.items[itemIndex].material = 0;
     itemIndex++;
 
+    // ground
     scene.items[itemIndex].position = vec3(0.0,-100.5,-1.0);
     scene.items[itemIndex].radius = 100.0;
     scene.items[itemIndex].shapeType = ShapeSphere;
-    scene.items[itemIndex].material = 0;
+    scene.items[itemIndex].material = 1;
+    itemIndex++;
+
+    // left
+    scene.items[itemIndex].position = vec3(-1.0, 0.0, -1.0);
+    scene.items[itemIndex].radius = 0.5;
+    scene.items[itemIndex].shapeType = ShapeSphere;
+    scene.items[itemIndex].material = 2;
+    itemIndex++;
+
+    // right
+    scene.items[itemIndex].position = vec3(1.0, 0.0, -1.0);
+    scene.items[itemIndex].radius = 0.5;
+    scene.items[itemIndex].shapeType = ShapeSphere;
+    scene.items[itemIndex].material = 3;
     itemIndex++;
 
     scene.numItems = itemIndex;
