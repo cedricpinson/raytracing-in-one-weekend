@@ -1,7 +1,3 @@
-
-#define RANDOM1
-#ifdef RANDOM1
-
 // random numbers utilities from https://www.shadertoy.com/view/tsf3Dn
 int MIN = -2147483648;
 int MAX = 2147483647;
@@ -38,15 +34,8 @@ float random(inout int seed, float minValue, float maxValue)
 {
     return minValue + (maxValue-minValue)*random(seed);
 }
-#else
-
-float random(){
-    vec2 co = gl_FragCoord.xy/iResolution.xy;
-    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
-}
-#endif
-
 //==================================================================
+
 
 const float pi = 3.1415926535897932385;
 
@@ -70,6 +59,7 @@ struct Material
     // 1  = Metal material
     int type;
     vec3 albedo;
+    float roughness;
 };
 
 struct Scene
@@ -97,16 +87,10 @@ vec3 rayAt(Ray ray, float t) {
 }
 
 vec3 randomUnitSphere(inout int seed) {
-    int i = 0;
-    vec3 p;
-    for (i =0; i < 100; i++) {
-        p = vec3(
+    vec3 p = vec3(
                  random(seed, -1.0,1.0),
                  random(seed, -1.0,1.0),
                  random(seed, -1.0,1.0));
-        if ( dot(p,p) <= 1.0)
-            return p;
-    }
     return normalize(p);
 }
 
@@ -222,7 +206,8 @@ bool scatterLambert(const Ray ray, const Hit hit, out vec3 attenuation, out Ray 
 
 // Metal material scattering
 bool scatterMetal(const Ray ray, const Hit hit, out vec3 attenuation, out Ray scattered) {
-    vec3 reflected = reflect(normalize(ray.direction), hit.normal);
+    float roughness = gScene.materials[hit.material].roughness;
+    vec3 reflected = reflect(normalize(ray.direction), hit.normal) + roughness * randomUnitSphere(raySeed);
     scattered.direction = normalize(reflected);
     scattered.origin = hit.position;
     attenuation = gScene.materials[hit.material].albedo;
@@ -295,11 +280,13 @@ void setupScene(out Scene scene)
     // left
     scene.materials[2].type = MaterialMetal;
     scene.materials[2].albedo = vec3(0.8,0.8,0.8);
+    scene.materials[2].roughness = 0.3;
     materialIndex++;
 
     // right
     scene.materials[3].type = MaterialMetal;
     scene.materials[3].albedo = vec3(0.8,0.6,0.2);
+    scene.materials[3].roughness = 1.0;
     materialIndex++;
 
 
