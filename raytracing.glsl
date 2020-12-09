@@ -53,13 +53,16 @@ struct Item
 
 const int MaterialLambert = 0;
 const int MaterialMetal = 1;
+const int MaterialDielectric = 2;
 struct Material
 {
     // 0  = Lambert material
     // 1  = Metal material
+    // 2  = Dielectric material
     int type;
     vec3 albedo;
     float roughness;
+    float ior;
 };
 
 struct Scene
@@ -80,6 +83,7 @@ struct Hit {
     float t;
     vec3 normal;
     int material;
+    bool frontFace;
 };
 
 vec3 rayAt(Ray ray, float t) {
@@ -139,6 +143,7 @@ bool intersectSphere(const Ray ray, const float t_min, const float t_max, const 
 
     bool front_face = dot(ray.direction, hit.normal) < 0.0;
     hit.normal = front_face ? hit.normal :-hit.normal;
+    hit.frontFace = front_face;
     return true;
 }
 
@@ -214,6 +219,38 @@ bool scatterMetal(const Ray ray, const Hit hit, out vec3 attenuation, out Ray sc
     return (dot(scattered.direction, hit.normal) > 0.0);
 }
 
+// Schlick reflectance
+float schlickReflectance(const float cosine, const float refractionRatio) {
+    // Use Schlick's approximation for reflectance.
+    float r0 = (1-refractionRatio) / (1+refractionRatio);
+    r0 = r0*r0;
+    return r0 + (1-r0)*pow((1 - cosine),5);
+}
+
+// Dielectric material scattering
+bool scatterDieletric(const Ray ray, const Hit hit, out vec3 attenuation, out Ray scattered) {
+    float ior = gScene.materials[hit.material].ior;
+    attenuation = vec3(1.0);
+    float refractionRatio = hit.frontFace ? (1.0/ior) : ior;
+
+    vec3 direction = normalize(ray.direction);
+    vec3 refracted = refract(direction, hit.normal, refractionRatio);
+
+    float cosTheta = min(dot(-direction, hit.normal), 1.0);
+    float sinTheta = sqrt(1.0 - cosTheta*cosTheta);
+
+    bool cannotRefract = refractionRatio * sinTheta > 1.0;
+
+    if (cannotRefract || schlickReflectance(cosTheta, refractionRatio) > random(raySeed, 0.0, 1.0) )
+        direction = reflect(direction, hit.normal);
+    else
+        direction = refract(direction, hit.normal, refractionRatio);
+
+
+    scattered = Ray(hit.position, direction);
+    return true;
+}
+
 bool rayInner(const Ray ray, out Ray nextRay, inout vec3 color)
 {
     Hit hit;
@@ -227,6 +264,9 @@ bool rayInner(const Ray ray, out Ray nextRay, inout vec3 color)
             break;
         case MaterialMetal:
             result = scatterMetal(ray, hit, attenuation, nextRay);
+            break;
+        case MaterialDielectric:
+            result = scatterDieletric(ray, hit, attenuation, nextRay);
             break;
         }
 
@@ -268,27 +308,35 @@ void setupScene(out Scene scene)
 {
     // center
     int materialIndex = 0;
-    scene.materials[0].type = MaterialLambert;
-    scene.materials[0].albedo = vec3(0.7,0.3,0.3);
+    scene.materials[materialIndex].type = MaterialLambert;
+    scene.materials[materialIndex].albedo = vec3(0.1,0.2,0.5);
+    scene.materials[materialIndex].ior = 1.5;
     materialIndex++;
 
     // ground
-    scene.materials[1].type = MaterialLambert;
-    scene.materials[1].albedo = vec3(0.8,0.8,0.0);
+    scene.materials[materialIndex].type = MaterialLambert;
+    scene.materials[materialIndex].albedo = vec3(0.8,0.8,0.0);
     materialIndex++;
 
     // left
-    scene.materials[2].type = MaterialMetal;
-    scene.materials[2].albedo = vec3(0.8,0.8,0.8);
-    scene.materials[2].roughness = 0.3;
+    scene.materials[materialIndex].type = MaterialDielectric; //MaterialMetal;
+    scene.materials[materialIndex].albedo = vec3(0.8,0.8,0.8);
+    scene.materials[materialIndex].roughness = 0.5;
+    scene.materials[materialIndex].ior = 1.5;
     materialIndex++;
 
     // right
-    scene.materials[3].type = MaterialMetal;
-    scene.materials[3].albedo = vec3(0.8,0.6,0.2);
-    scene.materials[3].roughness = 1.0;
+    scene.materials[materialIndex].type = MaterialMetal;
+    scene.materials[materialIndex].albedo = vec3(0.8,0.6,0.2);
+    scene.materials[materialIndex].roughness = 0.1;
     materialIndex++;
 
+    // left
+    scene.materials[materialIndex].type = MaterialDielectric; //MaterialMetal;
+    scene.materials[materialIndex].albedo = vec3(0.8,0.8,0.8);
+    scene.materials[materialIndex].roughness = -0.4;
+    scene.materials[materialIndex].ior = 1.5;
+    materialIndex++;
 
     int itemIndex = 0;
 
@@ -318,6 +366,12 @@ void setupScene(out Scene scene)
     scene.items[itemIndex].radius = 0.5;
     scene.items[itemIndex].shapeType = ShapeSphere;
     scene.items[itemIndex].material = 3;
+    itemIndex++;
+
+    scene.items[itemIndex].position = vec3(-1.0, 0.0, -1.0);
+    scene.items[itemIndex].radius = -0.4;
+    scene.items[itemIndex].shapeType = ShapeSphere;
+    scene.items[itemIndex].material = 2;
     itemIndex++;
 
     scene.numItems = itemIndex;
