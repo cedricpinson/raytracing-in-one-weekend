@@ -51,6 +51,15 @@ struct Item
     float radius;
 };
 
+struct Camera
+{
+    vec3 position;
+    vec3 lookAt;
+    vec3 u;
+    vec3 v;
+    vec3 w;
+};
+
 const int MaterialLambert = 0;
 const int MaterialMetal = 1;
 const int MaterialDielectric = 2;
@@ -92,9 +101,9 @@ vec3 rayAt(Ray ray, float t) {
 
 vec3 randomUnitSphere(inout int seed) {
     vec3 p = vec3(
-                 random(seed, -1.0,1.0),
-                 random(seed, -1.0,1.0),
-                 random(seed, -1.0,1.0));
+        random(seed, -1.0,1.0),
+        random(seed, -1.0,1.0),
+        random(seed, -1.0,1.0));
     return normalize(p);
 }
 
@@ -103,9 +112,9 @@ vec3 randomUnitHemiSphere(inout int seed, const vec3 normal) {
     int i;
     for (i =0; i < 10; i++) {
         p = vec3(
-                 random(seed, -1.0,1.0),
-                 random(seed, -1.0,1.0),
-                 random(seed, -1.0,1.0));
+            random(seed, -1.0,1.0),
+            random(seed, -1.0,1.0),
+            random(seed, -1.0,1.0));
         if (length(p) == 0.0) {
             continue;
         }
@@ -147,24 +156,19 @@ bool intersectSphere(const Ray ray, const float t_min, const float t_max, const 
     return true;
 }
 
-const vec3 camera = vec3(0.0);
-const float planez= -1.0;
-
-Ray getCameraRay(const vec2 sampleOffset)
+Ray getCameraRay(const vec2 sampleOffset, const in Camera camera)
 {
     vec4 fragCoord = gl_FragCoord;
 
     // Normalized pixel coordinates (from 0 to 1)
     vec2 uv = (fragCoord.xy+sampleOffset)/iResolution.xy;
-    float aspectRatio = iResolution.y * 1.0 / iResolution.x;
-    // compute from -2 to 2
-    uv.x = (uv.x-0.5)*4.0;
-    uv.y = (uv.y-0.5)*4.0* aspectRatio;
 
-    vec3 rayDirection = normalize(vec3(uv.x,uv.y,planez)-camera);
+    vec3 startPosition = camera.position - camera.u*0.5 - camera.v*0.5 - camera.w;
+    vec3 pixel = camera.u*uv.x +camera.v*uv.y;
+
     Ray ray;
-    ray.origin=camera;
-    ray.direction=rayDirection;
+    ray.origin=camera.position;
+    ray.direction=normalize(startPosition + pixel); //rayDirection;
     return ray;
 }
 
@@ -222,9 +226,9 @@ bool scatterMetal(const Ray ray, const Hit hit, out vec3 attenuation, out Ray sc
 // Schlick reflectance
 float schlickReflectance(const float cosine, const float refractionRatio) {
     // Use Schlick's approximation for reflectance.
-    float r0 = (1-refractionRatio) / (1+refractionRatio);
+    float r0 = (1.0-refractionRatio) / (1.0+refractionRatio);
     r0 = r0*r0;
-    return r0 + (1-r0)*pow((1 - cosine),5);
+    return r0 + (1.0-r0)*pow((1.0 - cosine),5.0);
 }
 
 // Dielectric material scattering
@@ -259,15 +263,15 @@ bool rayInner(const Ray ray, out Ray nextRay, inout vec3 color)
         bool result = false;
         vec3 attenuation;
         switch (gScene.materials[hit.material].type) {
-        case MaterialLambert:
-            result = scatterLambert(ray, hit, attenuation, nextRay);
-            break;
-        case MaterialMetal:
-            result = scatterMetal(ray, hit, attenuation, nextRay);
-            break;
-        case MaterialDielectric:
-            result = scatterDieletric(ray, hit, attenuation, nextRay);
-            break;
+            case MaterialLambert:
+                result = scatterLambert(ray, hit, attenuation, nextRay);
+                break;
+            case MaterialMetal:
+                result = scatterMetal(ray, hit, attenuation, nextRay);
+                break;
+            case MaterialDielectric:
+                result = scatterDieletric(ray, hit, attenuation, nextRay);
+                break;
         }
 
         if (result) {
@@ -285,7 +289,7 @@ bool rayInner(const Ray ray, out Ray nextRay, inout vec3 color)
 vec3 rayColor(const Ray ray)
 {
     vec3 color = vec3(1.0);
-    const int maxNumRay = 20;
+    const int maxNumRay = 10;
     int i = 0;
     Ray currentRay = ray;
     Ray nextRay;
@@ -377,6 +381,36 @@ void setupScene(out Scene scene)
     scene.numItems = itemIndex;
 }
 
+Camera computeCamera(const float w, const float h, const float fovy)
+{
+    Camera camera;
+    float focalLength = h*0.5/tan(fovy*0.5);
+    camera.position = vec3(0.0);
+    camera.u = vec3(w,0.0,0.0);
+    camera.v = vec3(0,h,0.0);
+    camera.w = vec3(0,0,focalLength);
+    return camera;
+}
+
+Camera computeCameraLookAt(const vec3 eye, const vec3 target, const float fovy)
+{
+    const vec3 vup = vec3(0.0, 1.0, 0.0);
+    
+    Camera camera;
+    float focalLength = iResolution.y*0.5/tan(radians(fovy*0.5));
+    camera.position = eye;
+    
+    vec3 w = normalize(eye-target);
+    vec3 u = cross(vup, w);
+    vec3 v = cross(w, u);
+
+    camera.u = u * iResolution.x;
+    camera.v = v * iResolution.y;
+    camera.w = w * focalLength;
+    return camera;
+}
+
+
 void mainImage( out vec4 fragColor, in vec2 fragCoord )
 {
     int rngSeed = int(fragCoord.x) + int(fragCoord.y) * int(iResolution.x);
@@ -384,12 +418,18 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 
     setupScene(gScene);
 
-    const int numSamples = 10;
+    //float fovy = 90 + 7.0 * cos(iTime*0.01);
+    float fovy = 90.0;
+    //Camera camera = computeCamera(iResolution.x, iResolution.y, fovy);
+    //Camera camera = computeCameraLookAt(vec3(cos(iTime*0.5), 0.0, 0.0), vec3(0.0,0.0,-1.0), fovy);
+    Camera camera = computeCameraLookAt(vec3(-2.0, 2.0, 1.0), vec3(0.0,0.0,-1.0), fovy);
+
+    const int numSamples = 5;
     int i;
     vec3 col= vec3(0.0);
     for (i = 0; i < numSamples; i++) {
         vec2 offset = vec2(random(rngSeed),random(rngSeed));
-        Ray ray = getCameraRay(offset);
+        Ray ray = getCameraRay(offset, camera);
         col += rayColor(ray);
     }
 
