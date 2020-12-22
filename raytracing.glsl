@@ -58,6 +58,9 @@ struct Camera
     vec3 u;
     vec3 v;
     vec3 w;
+    vec3 vecX;
+    vec3 vecY;
+    float lensRadius;
 };
 
 const int MaterialLambert = 0;
@@ -104,7 +107,18 @@ vec3 randomUnitSphere(inout int seed) {
         random(seed, -1.0,1.0),
         random(seed, -1.0,1.0),
         random(seed, -1.0,1.0));
-    return normalize(p);
+    if (dot(p,p) >= 1.0) {
+        return normalize(p);
+    }
+    return p;
+}
+
+vec3 randomUnitDisk(inout int seed) {
+    vec3 p = vec3(random(seed, -1.0,1.0), random(seed, -1.0,1.0), 0.0);
+    if (dot(p,p) >= 1.0) {
+        return normalize(p);
+    }
+    return p;
 }
 
 vec3 randomUnitHemiSphere(inout int seed, const vec3 normal) {
@@ -154,22 +168,6 @@ bool intersectSphere(const Ray ray, const float t_min, const float t_max, const 
     hit.normal = front_face ? hit.normal :-hit.normal;
     hit.frontFace = front_face;
     return true;
-}
-
-Ray getCameraRay(const vec2 sampleOffset, const in Camera camera)
-{
-    vec4 fragCoord = gl_FragCoord;
-
-    // Normalized pixel coordinates (from 0 to 1)
-    vec2 uv = (fragCoord.xy+sampleOffset)/iResolution.xy;
-
-    vec3 startPosition = camera.position - camera.u*0.5 - camera.v*0.5 - camera.w;
-    vec3 pixel = camera.u*uv.x +camera.v*uv.y;
-
-    Ray ray;
-    ray.origin=camera.position;
-    ray.direction=normalize(startPosition + pixel); //rayDirection;
-    return ray;
 }
 
 vec3 rayBackgroundColor(const Ray r) {
@@ -381,32 +379,50 @@ void setupScene(out Scene scene)
     scene.numItems = itemIndex;
 }
 
-Camera computeCamera(const float w, const float h, const float fovy)
+Ray getCameraRay(const vec2 sampleOffset, const in Camera camera)
 {
-    Camera camera;
-    float focalLength = h*0.5/tan(fovy*0.5);
-    camera.position = vec3(0.0);
-    camera.u = vec3(w,0.0,0.0);
-    camera.v = vec3(0,h,0.0);
-    camera.w = vec3(0,0,focalLength);
-    return camera;
+    vec4 fragCoord = gl_FragCoord;
+
+    // Normalized pixel coordinates (from 0 to 1)
+    vec2 uv = (fragCoord.xy+sampleOffset)/iResolution.xy;
+
+    // compute offset with disk to generate the blur
+//    vec3 rd = camera.lensRadius * randomUnitDisk(raySeed);
+    vec3 rd = camera.lensRadius * randomUnitDisk(raySeed);
+    vec3 diskOffset = camera.u * rd.x + camera.v * rd.y;
+    // diskOffset *= 0.05;
+    
+    vec3 startPosition =  camera.position - camera.vecX*0.5 - camera.vecY*0.5 - camera.w;
+    vec3 pixel = camera.vecX*uv.x +camera.vecY*uv.y;
+
+    Ray ray;
+    ray.origin=camera.position + diskOffset;
+    ray.direction=normalize(startPosition + pixel - camera.position  - diskOffset);
+    return ray;
 }
 
-Camera computeCameraLookAt(const vec3 eye, const vec3 target, const float fovy)
+Camera computeCameraLookAt(const vec3 eye, const vec3 target, const float aspectRatio, const float fovy, const float aperture, const float focusDist)
 {
     const vec3 vup = vec3(0.0, 1.0, 0.0);
     
     Camera camera;
-    float focalLength = iResolution.y*0.5/tan(radians(fovy*0.5));
+    float h = tan(radians(fovy)/2.0);
+    float height = h * 2.0;
+    float width = height * aspectRatio;
+
     camera.position = eye;
     
     vec3 w = normalize(eye-target);
     vec3 u = cross(vup, w);
     vec3 v = cross(w, u);
 
-    camera.u = u * iResolution.x;
-    camera.v = v * iResolution.y;
-    camera.w = w * focalLength;
+    camera.u = u;
+    camera.v = v;
+    camera.w = w * focusDist;
+    camera.vecX = camera.u * width * focusDist;
+    camera.vecY = camera.v * height * focusDist;
+    
+    camera.lensRadius = aperture/2.0;
     return camera;
 }
 
@@ -419,12 +435,14 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     setupScene(gScene);
 
     //float fovy = 90 + 7.0 * cos(iTime*0.01);
-    float fovy = 90.0;
-    //Camera camera = computeCamera(iResolution.x, iResolution.y, fovy);
-    //Camera camera = computeCameraLookAt(vec3(cos(iTime*0.5), 0.0, 0.0), vec3(0.0,0.0,-1.0), fovy);
-    Camera camera = computeCameraLookAt(vec3(-2.0, 2.0, 1.0), vec3(0.0,0.0,-1.0), fovy);
+    float fovy = 20.0;
+    float aperture = 2.0;
+    vec3 eye = vec3(3.0, 3.0, 2.0);
+    vec3 target = vec3(0.0,0.0,-1.0);
 
-    const int numSamples = 5;
+    Camera camera = computeCameraLookAt(eye, target, iResolution.x/iResolution.y, fovy, aperture, length(eye-target));
+
+    const int numSamples = 10;
     int i;
     vec3 col= vec3(0.0);
     for (i = 0; i < numSamples; i++) {
