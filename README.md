@@ -33,3 +33,7 @@ https://raytracing.github.io/books/RayTracingTheNextWeek.html
 ## [2 Motion Blur](https://raytracing.github.io/books/RayTracingTheNextWeek.html#motionblur)
 ![Part1](https://www.shadertoy.com/media/shaders/wlccW4.jpg)
 https://www.shadertoy.com/view/wlccW4
+
+## [4.2 A Checker Texture Blur](https://raytracing.github.io/books/RayTracingTheNextWeek.html#solidtextures/acheckertexture)
+![Part2](https://www.shadertoy.com/media/shaders/wl3cRs.jpg)
+https://www.shadertoy.com/view/wl3cRs

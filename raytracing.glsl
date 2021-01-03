@@ -65,6 +65,7 @@ float random(float minValue, float maxValue)
 
 //==================================================================
 
+#define PI 3.14159265359
 
 // vec4 vec3 shape position + index properties
 // properties
@@ -108,7 +109,7 @@ struct Camera
 
 #define NumItems 125
 Item Items[NumItems] = Item[NumItems](
-Item(vec4(0.0,-1000,-1.0,0.0), vec4(0.0,-1000,-1.0,0.0), vec4(0.5,0.5,0.5,0.0), 1000.0 ),
+Item(vec4(0.0,-1000,-1.0,0.0), vec4(0.0,-1000,-1.0,0.0), vec4(2.5,0.5,0.5,0.0), 1000.0 ),
 Item(vec4(0.0,1.0,0.0,0.0), vec4(0.0,1.0,0.0,0.0), vec4(0.0,0.0,0.0,1.5), 1.0 ),
 Item(vec4(-4.0,1.0,0.0,0.0), vec4(-4.0,1.0,0.0,0.0), vec4(0.4,0.2,0.1,0.0), 1.0 ),
 Item(vec4(4.0,1.0,0.0,0.0), vec4(4.0,1.0,0.0,0.0), vec4(0.7,0.6,0.5,0.001), 1.0 ),
@@ -500,7 +501,7 @@ struct Hit {
     Item item;
     vec3 position;
     vec3 normal;
-//    vec2 uv;
+    vec2 uv;
     float t;
     bool frontFace;
 };
@@ -513,6 +514,17 @@ vec3 getItemCenter(const Item item, const float time)
 {
     float ratio = (time-item.center0.w)/(item.center1.w-item.center0.w);
     return mix(item.center0.xyz, item.center1.xyz, ratio);
+}
+
+#define OddCheckboard vec3(0.2, 0.3, 0.1)
+#define EvenCheckboard vec3(0.9, 0.9, 0.9)
+
+vec3 getCheckerBoardTexture(const vec2 uv, const vec3 p) {
+    float sines = sin(10.0*p[0])*sin(10.0*p[1])*sin(10.0*p[2]);
+    if (sines < 0.0)
+        return OddCheckboard;
+    else
+        return EvenCheckboard;
 }
 
 vec3 randomUnitSphere() {
@@ -592,6 +604,22 @@ bool _intersectAABB(const Ray r, const vec3 aabbMin, const vec3 aabbMax, float t
     return true;
 }
 
+vec2 getSphereUV(const vec3 pos)
+{
+    // p: a given point on the sphere of radius one, centered at the origin.
+    // u: returned value [0,1] of angle around the Y axis from X=-1.
+    // v: returned value [0,1] of angle from Y=-1 to Y=+1.
+    //     <1 0 0> yields <0.50 0.50>       <-1  0  0> yields <0.00 0.50>
+    //     <0 1 0> yields <0.50 1.00>       < 0 -1  0> yields <0.50 0.00>
+    //     <0 0 1> yields <0.25 0.50>       < 0  0 -1> yields <0.75 0.50>
+
+    float theta = acos(-pos[1]);
+//    float phi = atan2(-pos[2], pos[0]) + PI;
+//    atan2(x,y) == GLSL atan(y,x)
+    float phi = atan(pos[0], -pos[2]) + PI;
+    return vec2(phi / (2.0*PI), theta / PI);    
+}
+
 bool _intersectSphere(const Ray ray, const float t_min, const float t_max, const vec4 sphere, inout Hit hit) {
     vec3 oc = ray.origin.xyz - sphere.xyz;
     float a = dot(ray.direction, ray.direction);
@@ -618,6 +646,7 @@ bool _intersectSphere(const Ray ray, const float t_min, const float t_max, const
     bool front_face = dot(ray.direction, hit.normal) < 0.0;
     hit.normal = front_face ? hit.normal :-hit.normal;
     hit.frontFace = front_face;
+    hit.uv = getSphereUV(hit.normal);
     return true;
 }
 
@@ -694,7 +723,13 @@ float scatterLambert(const Ray ray, const Hit hit, out vec3 attenuation, out Ray
     }
     scattered.origin.xyz = hit.position;
     scattered.origin.w = ray.origin.w; // time
-    attenuation = hit.item.material.xyz;
+
+    // if r > 1 then it means that we use a checkboard
+    if (hit.item.material[0] > 1.0) {
+        attenuation = getCheckerBoardTexture(hit.uv, hit.position);
+    } else {
+        attenuation = hit.item.material.xyz;
+    }
     return 1.0;
 }
 
