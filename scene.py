@@ -60,9 +60,9 @@ class Item:
         aabb1 = createAABBFromSphere(self.center1, self.radius)
         return extendAABB(aabb0, aabb1)
 
-    def toString(self):
+    def toString(self, endline=False):
         print(
-            "Item(vec4({},{},{},{}), vec4({},{},{},{}), vec4({},{},{},{}), {} ),".format(
+            "Item(vec4({},{},{},{}), vec4({},{},{},{}), vec4({},{},{},{}), {} ){}".format(
                 self.center0[0],
                 self.center0[1],
                 self.center0[2],
@@ -76,6 +76,7 @@ class Item:
                 self.material[2],
                 self.material[3],
                 self.radius,
+                "" if endline is True else ",",
             )
         )
 
@@ -120,9 +121,9 @@ class NodeBVH:
         else:
             print("node: {} # item {}".format(self.index, self.items[0].index))
 
-    def toString(self):
+    def toString(self, endline=False):
         print(
-            "BVH( vec3({},{},{}), vec3({},{},{}), ivec2({},{})),".format(
+            "BVH( vec3({},{},{}), vec3({},{},{}), ivec2({},{})){}".format(
                 self.aabb.min[0],
                 self.aabb.min[1],
                 self.aabb.min[2],
@@ -131,6 +132,7 @@ class NodeBVH:
                 self.aabb.max[2],
                 -1 if self.left == None else self.left.index,
                 self.items[0].index if self.left == None else self.right.index,
+                "" if endline is True else ",",
             )
         )
 
@@ -160,13 +162,24 @@ def length(pos0, pos1):
     return math.sqrt(a * a + b * b + c * c)
 
 
-def main():
-    maxSphere = 50
-    currentIndex = 0
+MaterialLambert = 0.0
+MaterialLambertCheckboard = MaterialLambert + 1.0
+MaterialLambertPerlin = MaterialLambert + 2.0
+MaterialMetal = 10.0
+MaterialRefrac = 20.0 + 1.5
 
-    materialLambert = 0.0
-    materialMetal = 0.001
-    materialRefrac = 1.5
+
+def printArray(array):
+    for item in array[:-1]:
+        item.toString()
+    array[-1].toString(True)
+
+
+def createMainScene():
+    global NodeBVHList
+    NodeBVHList = []
+    global ItemIndex
+    ItemIndex = 0
 
     objectList = []
     # ground
@@ -175,7 +188,7 @@ def main():
             [0.0, -1000, -1.0, 0.0],
             [0.0, -1000, -1.0, 0.0],
             1000.0,
-            (0.5, 0.5, 0.5, materialLambert),
+            (0.5, 0.5, 0.5, MaterialLambertCheckboard),
         )
     )
 
@@ -184,7 +197,7 @@ def main():
             [0.0, 1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0, 0.0],
             1.0,
-            (0.0, 0.0, 0.0, materialRefrac),
+            (0.0, 0.0, 0.0, MaterialRefrac),
         )
     )
     objectList.append(
@@ -192,7 +205,7 @@ def main():
             [-4.0, 1.0, 0.0, 0.0],
             [-4.0, 1.0, 0.0, 0.0],
             1.0,
-            (0.4, 0.2, 0.1, materialLambert),
+            (0.4, 0.2, 0.1, MaterialLambert),
         )
     )
     objectList.append(
@@ -200,7 +213,7 @@ def main():
             [4.0, 1.0, 0.0, 0.0],
             [4.0, 1.0, 0.0, 0.0],
             1.0,
-            (0.7, 0.6, 0.5, materialMetal),
+            (0.7, 0.6, 0.5, MaterialMetal),
         )
     )
 
@@ -224,7 +237,7 @@ def main():
                         random0 * random0,
                         random1 * random1,
                         random2 * random2,
-                        materialLambert,
+                        MaterialLambert,
                     )
                     center1 = [center0[0], center[1] + random0, center[2], 1.0]
                 elif random0 < 0.95:
@@ -232,28 +245,116 @@ def main():
                         random0 * 0.5 + 0.5,
                         random1 * 0.5 + 0.5,
                         random2 * 0.5 + 0.5,
-                        random1 * 0.49 + 0.01,
+                        random1 * 0.49 + MaterialMetal,
                     )
                 else:
-                    material = (1.5, 1.5, 1.5, 1.5)
+                    material = (1.5, 1.5, 1.5, MaterialRefrac)
 
                 objectList.append(createItem(center0, center1, radius, material))
 
     #
     print("#define NumItems {}".format(len(objectList)))
     print("Item Items[NumItems] = Item[NumItems](")
-    for item in objectList:
-        item.toString()
+    printArray(objectList)
     print(");")
 
     createBVH(objectList)
-    global NodeBVHList
 
     print("#define NumNodes {}".format(len(NodeBVHList)))
     print("BVH Nodes[NumNodes] = BVH[NumNodes](")
-    for node in NodeBVHList:
-        node.toString()
+    printArray(NodeBVHList)
     print(");")
+
+
+def simpleScene():
+    global NodeBVHList
+    NodeBVHList = []
+    global ItemIndex
+    ItemIndex = 0
+
+    objectList = []
+    objectList.append(
+        createItem(
+            [0.0, -10.0, 0.0, 0.0],
+            [0.0, -10.0, 0.0, 0.0],
+            10.0,
+            (0.4, 0.2, 0.1, MaterialLambertCheckboard),
+        )
+    )
+
+    objectList.append(
+        createItem(
+            [0.0, 10.0, 0.0, 0.0],
+            [0.0, 10.0, 0.0, 0.0],
+            10.0,
+            (0.4, 0.2, 0.1, MaterialLambertCheckboard),
+        )
+    )
+
+    print("#define NumItems {}".format(len(objectList)))
+    print("Item Items[NumItems] = Item[NumItems](")
+    printArray(objectList)
+    print(");")
+
+    createBVH(objectList)
+
+    print("#define NumNodes {}".format(len(NodeBVHList)))
+    print("BVH Nodes[NumNodes] = BVH[NumNodes](")
+    printArray(NodeBVHList)
+    print(");")
+
+
+def simpleTwoSphereScene():
+    global NodeBVHList
+    NodeBVHList = []
+    global ItemIndex
+    ItemIndex = 0
+
+    objectList = []
+    objectList.append(
+        createItem(
+            [0.0, -1000.0, 0.0, 0.0],
+            [0.0, -1000.0, 0.0, 0.0],
+            1000.0,
+            (0.4, 0.2, 0.1, MaterialLambertPerlin),
+        )
+    )
+
+    objectList.append(
+        createItem(
+            [0.0, 2.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0, 0.0],
+            2.0,
+            (0.4, 0.2, 0.1, MaterialLambertPerlin),
+        )
+    )
+
+    print("#define NumItems {}".format(len(objectList)))
+    print("Item Items[NumItems] = Item[NumItems](")
+    printArray(objectList)
+    print(");")
+
+    createBVH(objectList)
+
+    print("#define NumNodes {}".format(len(NodeBVHList)))
+    print("BVH Nodes[NumNodes] = BVH[NumNodes](")
+    printArray(NodeBVHList)
+    print(");")
+
+
+def main():
+    print("#define MainScene")
+    print("//#define SimpleScene")
+    print("//#define TwoSpherePerlin")
+    print("#ifdef MainScene")
+    createMainScene()
+    print("#endif")
+    print("#ifdef SimpleScene")
+    simpleScene()
+    print("#endif")
+    print("#ifdef TwoSpherePerlin")
+    simpleTwoSphereScene()
+    print("#endif")
 
 
 if __name__ == "__main__":

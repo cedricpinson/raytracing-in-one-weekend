@@ -34,6 +34,10 @@ https://raytracing.github.io/books/RayTracingTheNextWeek.html
 ![Part1](https://www.shadertoy.com/media/shaders/wlccW4.jpg)
 https://www.shadertoy.com/view/wlccW4
 
-## [4.2 A Checker Texture Blur](https://raytracing.github.io/books/RayTracingTheNextWeek.html#solidtextures/acheckertexture)
+## [4.2 A Checker Texture](https://raytracing.github.io/books/RayTracingTheNextWeek.html#solidtextures/acheckertexture)
 ![Part2](https://www.shadertoy.com/media/shaders/wl3cRs.jpg)
 https://www.shadertoy.com/view/wl3cRs
+
+## [5 Noise](https://raytracing.github.io/books/RayTracingTheNextWeek.html#perlinnoise)
+![Part2](https://www.shadertoy.com/media/shaders/3lKcDh.jpg)
+https://www.shadertoy.com/view/3lKcDh
