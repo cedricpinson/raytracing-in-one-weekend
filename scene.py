@@ -21,6 +21,13 @@ def createAABBFromSphere(center, radius):
     )
 
 
+def createAABBFromRect(pos0, pos1, k):
+    return AABB(
+        (pos0[0], pos0[1], k - 0.001),
+        (pos1[0], pos1[1], k + 0.001),
+    )
+
+
 def extendAABB(aabb0, aabb1):
     minv = (
         min(aabb0.min[0], aabb1.min[0]),
@@ -39,13 +46,21 @@ ItemIndex = 0
 
 
 class Item:
-    def __init__(self, pos0, pos1, radius, material):
-        self.center0 = pos0[:3]
-        self.center1 = pos1[:3]
-        self.t0 = pos0[3]
-        self.t1 = pos1[3]
-        self.radius = radius
+    def __init__(self, pos0, pos1, radiusOrK, material, isRect=False):
+        self.center0 = pos0[:]
+        self.center1 = pos1[:]
+        self.radius = radiusOrK
         self.material = material
+        self.isRect = isRect
+        self.t0 = 0.0
+        self.t1 = 0.0
+
+        if isRect:
+            self.t1 = -1
+        else:
+            self.t0 = pos0[3]
+            self.t1 = pos1[3]
+
         self.aabb = self.createAABB()
 
         global ItemIndex
@@ -53,6 +68,9 @@ class Item:
         ItemIndex += 1
 
     def createAABB(self):
+        if self.isRect:
+            return createAABBFromRect(self.center0, self.center1, self.radius)
+
         aabb0 = createAABBFromSphere(self.center0, self.radius)
         if self.t0 == self.t1:
             return aabb0
@@ -61,24 +79,45 @@ class Item:
         return extendAABB(aabb0, aabb1)
 
     def toString(self, endline=False):
-        print(
-            "Item(vec4({},{},{},{}), vec4({},{},{},{}), vec4({},{},{},{}), {} ){}".format(
-                self.center0[0],
-                self.center0[1],
-                self.center0[2],
-                self.t0,
-                self.center1[0],
-                self.center1[1],
-                self.center1[2],
-                self.t1,
-                self.material[0],
-                self.material[1],
-                self.material[2],
-                self.material[3],
-                self.radius,
-                "" if endline is True else ",",
+        if self.isRect:
+            # pack rect into glsl Item
+            print(
+                "Item(vec4({},{},{},{}), vec4({},{},{},{}), vec4({},{},{},{}), {} ){}".format(
+                    self.center0[0],
+                    self.center0[1],
+                    self.center1[0],
+                    self.center1[1],
+                    0.0,
+                    0.0,
+                    0.0,
+                    "RECT_XY",
+                    self.material[0],
+                    self.material[1],
+                    self.material[2],
+                    self.material[3],
+                    self.radius,
+                    "" if endline is True else ",",
+                )
             )
-        )
+        else:
+            print(
+                "Item(vec4({},{},{},{}), vec4({},{},{},{}), vec4({},{},{},{}), {} ){}".format(
+                    self.center0[0],
+                    self.center0[1],
+                    self.center0[2],
+                    self.t0,
+                    self.center1[0],
+                    self.center1[1],
+                    self.center1[2],
+                    self.t1,
+                    self.material[0],
+                    self.material[1],
+                    self.material[2],
+                    self.material[3],
+                    self.radius,
+                    "" if endline is True else ",",
+                )
+            )
 
 
 NodeBVHList = []
@@ -151,7 +190,11 @@ def createBVH(objectList):
     # print("numNodes {}".format(bvh.count()))
 
 
-def createItem(pos0, pos1, radius, material):
+def createRect(pos0, pos1, k, material):
+    return Item(pos0, pos1, k, material, True)
+
+
+def createSphere(pos0, pos1, radius, material):
     return Item(pos0, pos1, radius, material)
 
 
@@ -167,6 +210,7 @@ MaterialLambertCheckboard = MaterialLambert + 1.0
 MaterialLambertPerlin = MaterialLambert + 2.0
 MaterialMetal = 10.0
 MaterialRefrac = 20.0 + 1.5
+MaterialLight = 30.0 + 0.5
 
 
 def printArray(array):
@@ -184,7 +228,7 @@ def createMainScene():
     objectList = []
     # ground
     objectList.append(
-        createItem(
+        createSphere(
             [0.0, -1000, -1.0, 0.0],
             [0.0, -1000, -1.0, 0.0],
             1000.0,
@@ -193,7 +237,7 @@ def createMainScene():
     )
 
     objectList.append(
-        createItem(
+        createSphere(
             [0.0, 1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0, 0.0],
             1.0,
@@ -201,7 +245,7 @@ def createMainScene():
         )
     )
     objectList.append(
-        createItem(
+        createSphere(
             [-4.0, 1.0, 0.0, 0.0],
             [-4.0, 1.0, 0.0, 0.0],
             1.0,
@@ -209,7 +253,7 @@ def createMainScene():
         )
     )
     objectList.append(
-        createItem(
+        createSphere(
             [4.0, 1.0, 0.0, 0.0],
             [4.0, 1.0, 0.0, 0.0],
             1.0,
@@ -250,7 +294,7 @@ def createMainScene():
                 else:
                     material = (1.5, 1.5, 1.5, MaterialRefrac)
 
-                objectList.append(createItem(center0, center1, radius, material))
+                objectList.append(createSphere(center0, center1, radius, material))
 
     #
     print("#define NumItems {}".format(len(objectList)))
@@ -274,7 +318,7 @@ def simpleScene():
 
     objectList = []
     objectList.append(
-        createItem(
+        createSphere(
             [0.0, -10.0, 0.0, 0.0],
             [0.0, -10.0, 0.0, 0.0],
             10.0,
@@ -283,7 +327,7 @@ def simpleScene():
     )
 
     objectList.append(
-        createItem(
+        createSphere(
             [0.0, 10.0, 0.0, 0.0],
             [0.0, 10.0, 0.0, 0.0],
             10.0,
@@ -312,7 +356,7 @@ def simpleTwoSphereScene():
 
     objectList = []
     objectList.append(
-        createItem(
+        createSphere(
             [0.0, -1000.0, 0.0, 0.0],
             [0.0, -1000.0, 0.0, 0.0],
             1000.0,
@@ -321,7 +365,7 @@ def simpleTwoSphereScene():
     )
 
     objectList.append(
-        createItem(
+        createSphere(
             [0.0, 2.0, 0.0, 0.0],
             [0.0, 2.0, 0.0, 0.0],
             2.0,
@@ -342,10 +386,59 @@ def simpleTwoSphereScene():
     print(");")
 
 
+def simpleLightScene():
+    global NodeBVHList
+    NodeBVHList = []
+    global ItemIndex
+    ItemIndex = 0
+
+    objectList = []
+    objectList.append(
+        createSphere(
+            [0.0, -1000.0, 0.0, 0.0],
+            [0.0, -1000.0, 0.0, 0.0],
+            1000.0,
+            (0.4, 0.2, 0.1, MaterialLambertPerlin),
+        )
+    )
+
+    objectList.append(
+        createSphere(
+            [0.0, 2.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0, 0.0],
+            2.0,
+            (0.4, 0.2, 0.1, MaterialLambertPerlin),
+        )
+    )
+
+    objectList.append(
+        createRect(
+            [3.0, 5.0],
+            [1.0, 2.0],
+            2.0,
+            (0.4, 0.2, 0.1, MaterialLambertPerlin),
+        )
+    )
+
+    print("#define NumItems {}".format(len(objectList)))
+    print("Item Items[NumItems] = Item[NumItems](")
+    printArray(objectList)
+    print(");")
+
+    createBVH(objectList)
+
+    print("#define NumNodes {}".format(len(NodeBVHList)))
+    print("BVH Nodes[NumNodes] = BVH[NumNodes](")
+    printArray(NodeBVHList)
+    print(");")
+
+
 def main():
+    print("#define RECT_XY -3.0")
     print("#define MainScene")
     print("//#define SimpleScene")
     print("//#define TwoSpherePerlin")
+    print("//#define SimpleLight")
     print("#ifdef MainScene")
     createMainScene()
     print("#endif")
@@ -354,6 +447,9 @@ def main():
     print("#endif")
     print("#ifdef TwoSpherePerlin")
     simpleTwoSphereScene()
+    print("#endif")
+    print("#ifdef SimpleLight")
+    simpleLightScene()
     print("#endif")
 
 

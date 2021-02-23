@@ -39,5 +39,9 @@ https://www.shadertoy.com/view/wlccW4
 https://www.shadertoy.com/view/wl3cRs
 
 ## [5 Noise](https://raytracing.github.io/books/RayTracingTheNextWeek.html#perlinnoise)
-![Part2](https://www.shadertoy.com/media/shaders/3lKcDh.jpg)
+![Part3](https://www.shadertoy.com/media/shaders/3lKcDh.jpg)
 https://www.shadertoy.com/view/3lKcDh
+
+## [7.4 Turning Objects into Lights](https://raytracing.github.io/books/RayTracingTheNextWeek.html#rectanglesandlights/turningobjectsintolights)
+![Part4](https://www.shadertoy.com/media/shaders/wtKfRm.jpg)
+https://www.shadertoy.com/view/wtKfRm
