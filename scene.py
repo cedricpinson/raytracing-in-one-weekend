@@ -2,7 +2,10 @@
 
 import math
 import random
+import sys
 from dataclasses import dataclass
+
+dump_bvh = True
 
 
 @dataclass
@@ -21,10 +24,39 @@ def createAABBFromSphere(center, radius):
     )
 
 
-def createAABBFromRect(pos0, pos1, k):
+def createAABBFromBox(center, size):
+    return AABB(
+        (
+            center[0] - size[0] * 0.5,
+            center[1] - size[1] * 0.5,
+            center[2] - size[2] * 0.5,
+        ),
+        (
+            center[0] + size[0] * 0.5,
+            center[1] + size[1] * 0.5,
+            center[2] + size[2] * 0.5,
+        ),
+    )
+
+
+def createAABBFromRectXY(pos0, pos1, k):
     return AABB(
         (pos0[0], pos0[1], k - 0.001),
         (pos1[0], pos1[1], k + 0.001),
+    )
+
+
+def createAABBFromRectXZ(pos0, pos1, k):
+    return AABB(
+        (pos0[0], k - 0.001, pos0[1]),
+        (pos1[0], k + 0.001, pos1[1]),
+    )
+
+
+def createAABBFromRectYZ(pos0, pos1, k):
+    return AABB(
+        (k - 0.001, pos0[0], pos0[1]),
+        (k + 0.001, pos1[0], pos1[1]),
     )
 
 
@@ -46,75 +78,108 @@ ItemIndex = 0
 
 
 class Item:
-    def __init__(self, pos0, pos1, radiusOrK, material, isRect=False):
-        self.center0 = pos0[:]
-        self.center1 = pos1[:]
-        self.radius = radiusOrK
-        self.material = material
-        self.isRect = isRect
-        self.t0 = 0.0
-        self.t1 = 0.0
+    def __init__(self):
+        pass
 
-        if isRect:
-            self.t1 = -1
-        else:
-            self.t0 = pos0[3]
-            self.t1 = pos1[3]
-
-        self.aabb = self.createAABB()
-
+    def register(self):
         global ItemIndex
         self.index = ItemIndex
         ItemIndex += 1
 
-    def createAABB(self):
-        if self.isRect:
-            return createAABBFromRect(self.center0, self.center1, self.radius)
+    def createSphere(self, pos, radius, material):
+        self.position = pos[:]
+        self.radius = radius
+        self.material = material
+        self.shape_type = "SHAPE_SPHERE"
 
-        aabb0 = createAABBFromSphere(self.center0, self.radius)
-        if self.t0 == self.t1:
-            return aabb0
+        self.aabb = createAABBFromSphere(pos, radius)
+        self.register()
 
-        aabb1 = createAABBFromSphere(self.center1, self.radius)
-        return extendAABB(aabb0, aabb1)
+    def createRectXY(self, pos0, pos1, k, material):
+        self.position0 = pos0[:]
+        self.position1 = pos1[:]
+        self.k = k
+        self.material = material
+        self.shape_type = "SHAPE_RECT_XY"
+
+        self.aabb = createAABBFromRectXY(pos0, pos1, k)
+        self.register()
+
+    def createRectXZ(self, pos0, pos1, k, material):
+        self.createRectXY(pos0, pos1, k, material)
+        self.aabb = createAABBFromRectXZ(pos0, pos1, k)
+        self.shape_type = "SHAPE_RECT_XZ"
+
+    def createRectYZ(self, pos0, pos1, k, material):
+        self.createRectXY(pos0, pos1, k, material)
+        self.aabb = createAABBFromRectYZ(pos0, pos1, k)
+        self.shape_type = "SHAPE_RECT_YZ"
+
+    def createBox(self, pos, size, material):
+        self.position = pos[:]
+        self.size = size[:]
+        self.material = material
+        self.shape_type = "SHAPE_BOX"
+
+        self.aabb = createAABBFromBox(pos, size)
+        self.register()
 
     def toString(self, endline=False):
-        if self.isRect:
-            # pack rect into glsl Item
+        if self.shape_type == "SHAPE_SPHERE":
             print(
-                "Item(vec4({},{},{},{}), vec4({},{},{},{}), vec4({},{},{},{}), {} ){}".format(
-                    self.center0[0],
-                    self.center0[1],
-                    self.center1[0],
-                    self.center1[1],
+                "Item(vec3({},{},{}), int({}), vec4({},{},{},{}), vec4({},{},{},{})){}".format(
+                    self.position[0],
+                    self.position[1],
+                    self.position[2],
+                    self.shape_type,
+                    self.radius,
                     0.0,
                     0.0,
                     0.0,
-                    "RECT_XY",
                     self.material[0],
                     self.material[1],
                     self.material[2],
                     self.material[3],
-                    self.radius,
                     "" if endline is True else ",",
                 )
             )
-        else:
+        elif (
+            self.shape_type == "SHAPE_RECT_XY"
+            or self.shape_type == "SHAPE_RECT_XZ"
+            or self.shape_type == "SHAPE_RECT_YZ"
+        ):
             print(
-                "Item(vec4({},{},{},{}), vec4({},{},{},{}), vec4({},{},{},{}), {} ){}".format(
-                    self.center0[0],
-                    self.center0[1],
-                    self.center0[2],
-                    self.t0,
-                    self.center1[0],
-                    self.center1[1],
-                    self.center1[2],
-                    self.t1,
+                "Item(vec3({},{},{}), int({}), vec4({},{},{},{}), vec4({},{},{},{})){}".format(
+                    self.position0[0],
+                    self.position0[1],
+                    0.0,
+                    self.shape_type,
+                    self.position1[0],
+                    self.position1[1],
+                    self.k,
+                    0.0,
                     self.material[0],
                     self.material[1],
                     self.material[2],
                     self.material[3],
-                    self.radius,
+                    "" if endline is True else ",",
+                )
+            )
+        elif self.shape_type == "SHAPE_BOX":
+            print(
+                "Item(vec3({},{},{}), int({}), vec4({},{},{},{}), vec4({},{},{},{})){}".format(
+                    self.position[0],
+                    self.position[1],
+                    self.position[2],
+                    self.shape_type,
+                    self.size[0],
+                    self.size[1],
+                    self.size[2],
+                    0.0,
+                    self.material[0],
+                    self.material[1],
+                    self.material[2],
+                    self.material[3],
                     "" if endline is True else ",",
                 )
             )
@@ -190,12 +255,34 @@ def createBVH(objectList):
     # print("numNodes {}".format(bvh.count()))
 
 
-def createRect(pos0, pos1, k, material):
-    return Item(pos0, pos1, k, material, True)
+def createRectXY(pos0, pos1, k, material):
+    item = Item()
+    item.createRectXY(pos0, pos1, k, material)
+    return item
 
 
-def createSphere(pos0, pos1, radius, material):
-    return Item(pos0, pos1, radius, material)
+def createRectXZ(pos0, pos1, k, material):
+    item = Item()
+    item.createRectXZ(pos0, pos1, k, material)
+    return item
+
+
+def createRectYZ(pos0, pos1, k, material):
+    item = Item()
+    item.createRectYZ(pos0, pos1, k, material)
+    return item
+
+
+def createSphere(pos, radius, material):
+    item = Item()
+    item.createSphere(pos, radius, material)
+    return item
+
+
+def createBox(pos, size, material):
+    item = Item()
+    item.createBox(pos, size, material)
+    return item
 
 
 def length(pos0, pos1):
@@ -229,8 +316,7 @@ def createMainScene():
     # ground
     objectList.append(
         createSphere(
-            [0.0, -1000, -1.0, 0.0],
-            [0.0, -1000, -1.0, 0.0],
+            [0.0, -1000, -1.0],
             1000.0,
             (0.5, 0.5, 0.5, MaterialLambertCheckboard),
         )
@@ -238,24 +324,21 @@ def createMainScene():
 
     objectList.append(
         createSphere(
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
             1.0,
             (0.0, 0.0, 0.0, MaterialRefrac),
         )
     )
     objectList.append(
         createSphere(
-            [-4.0, 1.0, 0.0, 0.0],
-            [-4.0, 1.0, 0.0, 0.0],
+            [-4.0, 1.0, 0.0],
             1.0,
             (0.4, 0.2, 0.1, MaterialLambert),
         )
     )
     objectList.append(
         createSphere(
-            [4.0, 1.0, 0.0, 0.0],
-            [4.0, 1.0, 0.0, 0.0],
+            [4.0, 1.0, 0.0],
             1.0,
             (0.7, 0.6, 0.5, MaterialMetal),
         )
@@ -272,8 +355,6 @@ def createMainScene():
             center = [float(a) + 0.9 * random0, 0.2, float(b) + 0.9 * random1]
             d = length([4, 0.2, 0], center)
             if d > 0.9:
-                center0 = [center[0], center[1], center[2], 0.0]
-                center1 = center0
                 radius = 0.2
 
                 if random0 < 0.8:
@@ -283,7 +364,6 @@ def createMainScene():
                         random2 * random2,
                         MaterialLambert,
                     )
-                    center1 = [center0[0], center[1] + random0, center[2], 1.0]
                 elif random0 < 0.95:
                     material = (
                         random0 * 0.5 + 0.5,
@@ -294,7 +374,7 @@ def createMainScene():
                 else:
                     material = (1.5, 1.5, 1.5, MaterialRefrac)
 
-                objectList.append(createSphere(center0, center1, radius, material))
+                objectList.append(createSphere(center, radius, material))
 
     #
     print("#define NumItems {}".format(len(objectList)))
@@ -304,10 +384,12 @@ def createMainScene():
 
     createBVH(objectList)
 
-    print("#define NumNodes {}".format(len(NodeBVHList)))
-    print("BVH Nodes[NumNodes] = BVH[NumNodes](")
-    printArray(NodeBVHList)
-    print(");")
+    global dump_bvh
+    if dump_bvh:
+        print("#define NumNodes {}".format(len(NodeBVHList)))
+        print("BVH Nodes[NumNodes] = BVH[NumNodes](")
+        printArray(NodeBVHList)
+        print(");")
 
 
 def simpleScene():
@@ -319,8 +401,7 @@ def simpleScene():
     objectList = []
     objectList.append(
         createSphere(
-            [0.0, -10.0, 0.0, 0.0],
-            [0.0, -10.0, 0.0, 0.0],
+            [0.0, -10.0, 0.0],
             10.0,
             (0.4, 0.2, 0.1, MaterialLambertCheckboard),
         )
@@ -328,8 +409,7 @@ def simpleScene():
 
     objectList.append(
         createSphere(
-            [0.0, 10.0, 0.0, 0.0],
-            [0.0, 10.0, 0.0, 0.0],
+            [0.0, 10.0, 0.0],
             10.0,
             (0.4, 0.2, 0.1, MaterialLambertCheckboard),
         )
@@ -342,10 +422,12 @@ def simpleScene():
 
     createBVH(objectList)
 
-    print("#define NumNodes {}".format(len(NodeBVHList)))
-    print("BVH Nodes[NumNodes] = BVH[NumNodes](")
-    printArray(NodeBVHList)
-    print(");")
+    global dump_bvh
+    if dump_bvh:
+        print("#define NumNodes {}".format(len(NodeBVHList)))
+        print("BVH Nodes[NumNodes] = BVH[NumNodes](")
+        printArray(NodeBVHList)
+        print(");")
 
 
 def simpleTwoSphereScene():
@@ -357,8 +439,7 @@ def simpleTwoSphereScene():
     objectList = []
     objectList.append(
         createSphere(
-            [0.0, -1000.0, 0.0, 0.0],
-            [0.0, -1000.0, 0.0, 0.0],
+            [0.0, -1000.0, 0.0],
             1000.0,
             (0.4, 0.2, 0.1, MaterialLambertPerlin),
         )
@@ -366,8 +447,7 @@ def simpleTwoSphereScene():
 
     objectList.append(
         createSphere(
-            [0.0, 2.0, 0.0, 0.0],
-            [0.0, 2.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0],
             2.0,
             (0.4, 0.2, 0.1, MaterialLambertPerlin),
         )
@@ -380,10 +460,12 @@ def simpleTwoSphereScene():
 
     createBVH(objectList)
 
-    print("#define NumNodes {}".format(len(NodeBVHList)))
-    print("BVH Nodes[NumNodes] = BVH[NumNodes](")
-    printArray(NodeBVHList)
-    print(");")
+    global dump_bvh
+    if dump_bvh:
+        print("#define NumNodes {}".format(len(NodeBVHList)))
+        print("BVH Nodes[NumNodes] = BVH[NumNodes](")
+        printArray(NodeBVHList)
+        print(");")
 
 
 def simpleLightScene():
@@ -395,8 +477,7 @@ def simpleLightScene():
     objectList = []
     objectList.append(
         createSphere(
-            [0.0, -1000.0, 0.0, 0.0],
-            [0.0, -1000.0, 0.0, 0.0],
+            [0.0, -1000.0, 0.0],
             1000.0,
             (0.4, 0.2, 0.1, MaterialLambertPerlin),
         )
@@ -404,19 +485,18 @@ def simpleLightScene():
 
     objectList.append(
         createSphere(
-            [0.0, 2.0, 0.0, 0.0],
-            [0.0, 2.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0],
             2.0,
             (0.4, 0.2, 0.1, MaterialLambertPerlin),
         )
     )
 
     objectList.append(
-        createRect(
-            [3.0, 5.0],
-            [1.0, 2.0],
-            2.0,
-            (0.4, 0.2, 0.1, MaterialLambertPerlin),
+        createRectXY(
+            [3.0, 1.0],
+            [5.0, 3.0],
+            -2.0,
+            (4.0, 4.0, 4.0, MaterialLight),
         )
     )
 
@@ -427,18 +507,167 @@ def simpleLightScene():
 
     createBVH(objectList)
 
-    print("#define NumNodes {}".format(len(NodeBVHList)))
-    print("BVH Nodes[NumNodes] = BVH[NumNodes](")
-    printArray(NodeBVHList)
+    global dump_bvh
+    if dump_bvh:
+        print("#define NumNodes {}".format(len(NodeBVHList)))
+        print("BVH Nodes[NumNodes] = BVH[NumNodes](")
+        printArray(NodeBVHList)
+        print(");")
+
+
+def createBox(pos0, pos1, material):
+    objectList = []
+
+    objectList.append(
+        createRectXY(
+            [pos0[0], pos0[1]],
+            [pos1[0], pos1[1]],
+            pos1[2],
+            material,
+        )
+    )
+
+    objectList.append(
+        createRectXY(
+            [pos0[0], pos0[1]],
+            [pos1[0], pos1[1]],
+            pos0[2],
+            material,
+        )
+    )
+
+    objectList.append(
+        createRectXZ(
+            [pos0[0], pos0[2]],
+            [pos1[0], pos1[2]],
+            pos1[1],
+            material,
+        )
+    )
+
+    objectList.append(
+        createRectXZ(
+            [pos0[0], pos0[2]],
+            [pos1[0], pos1[2]],
+            pos0[1],
+            material,
+        )
+    )
+
+    objectList.append(
+        createRectYZ(
+            [pos0[1], pos0[2]],
+            [pos1[1], pos1[2]],
+            pos0[0],
+            material,
+        )
+    )
+
+    objectList.append(
+        createRectYZ(
+            [pos0[1], pos0[2]],
+            [pos1[1], pos1[2]],
+            pos1[0],
+            material,
+        )
+    )
+
+    return objectList
+
+
+def cornelBoxScene():
+    global NodeBVHList
+    NodeBVHList = []
+    global ItemIndex
+    ItemIndex = 0
+
+    red = (0.65, 0.05, 0.05, MaterialLambert)
+    green = (0.12, 0.45, 0.15, MaterialLambert)
+    white = (0.73, 0.73, 0.73, MaterialLambert)
+
+    objectList = []
+    objectList.append(
+        createRectYZ(
+            [0.0, 0.0],
+            [555.0, 555.0],
+            555.0,
+            green,
+        )
+    )
+
+    objectList.append(
+        createRectYZ(
+            [0.0, 0.0],
+            [555.0, 555.0],
+            0.0,
+            red,
+        )
+    )
+
+    objectList.append(
+        createRectXZ(
+            [213.0, 227.0],
+            [343.0, 332.0],
+            554.0,
+            (15.0, 15.0, 15.0, MaterialLight),
+        )
+    )
+
+    objectList.append(
+        createRectXZ(
+            [0.0, 0.0],
+            [555.0, 555.0],
+            0.0,
+            white,
+        )
+    )
+
+    objectList.append(
+        createRectXZ(
+            [0.0, 0.0],
+            [555.0, 555.0],
+            555.0,
+            white,
+        )
+    )
+
+    objectList.append(
+        createRectXY(
+            [0.0, 0.0],
+            [555.0, 555.0],
+            555.0,
+            white,
+        )
+    )
+
+    objectList.extend(createBox([130.0, 0.0, 65.0], [295.0, 165.0, 230.0], white))
+    objectList.extend(createBox([265.0, 0.0, 295.0], [430.0, 330.0, 460.0], white))
+
+    print("#define NumItems {}".format(len(objectList)))
+    print("Item Items[NumItems] = Item[NumItems](")
+    printArray(objectList)
     print(");")
+
+    createBVH(objectList)
+
+    global dump_bvh
+    if dump_bvh:
+        print("#define NumNodes {}".format(len(NodeBVHList)))
+        print("BVH Nodes[NumNodes] = BVH[NumNodes](")
+        printArray(NodeBVHList)
+        print(");")
 
 
 def main():
-    print("#define RECT_XY -3.0")
-    print("#define MainScene")
+    global dump_bvh
+    if len(sys.argv) > 0:
+        dump_bvh = False if sys.argv[1] == "--no-bvh" else True
+
+    print("//#define MainScene")
     print("//#define SimpleScene")
     print("//#define TwoSpherePerlin")
     print("//#define SimpleLight")
+    print("#define CornelBox")
     print("#ifdef MainScene")
     createMainScene()
     print("#endif")
@@ -450,6 +679,9 @@ def main():
     print("#endif")
     print("#ifdef SimpleLight")
     simpleLightScene()
+    print("#endif")
+    print("#ifdef CornelBox")
+    cornelBoxScene()
     print("#endif")
 
 

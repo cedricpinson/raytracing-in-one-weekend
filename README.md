@@ -45,3 +45,8 @@ https://www.shadertoy.com/view/3lKcDh
 ## [7.4 Turning Objects into Lights](https://raytracing.github.io/books/RayTracingTheNextWeek.html#rectanglesandlights/turningobjectsintolights)
 ![Part4](https://www.shadertoy.com/media/shaders/wtKfRm.jpg)
 https://www.shadertoy.com/view/wtKfRm
+
+## [7.6 Cornell box](https://raytracing.github.io/books/RayTracingTheNextWeek.html#rectanglesandlights/creatinganempty%E2%80%9Ccornellbox%E2%80%9D)
+![Part5](https://www.shadertoy.com/media/shaders/wtKBWz.jpg)
+https://www.shadertoy.com/view/wtKBWz
+
